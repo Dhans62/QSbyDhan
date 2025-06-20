@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Quickshifter Control</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { background-color: #111; color: white; font-family: Arial; text-align: center; padding: 20px; }
+    .btn, .Qs-btn, .save-btn { margin: 10px; padding: 10px; border-radius: 10px; border: none; }
+    .Qs-btn { background: #333; color: white; width: 45%; max-width: 200px; }
+    .btn { background: #333; color: white; width: 80px; height: 80px; font-size: 20px; }
+    .save-btn { background: white; color: black; font-weight: bold; }
+    .popup { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000c; z-index: 999; display: none; }
+    .popup-content { padding: 20px; }
+  </style>
+</head>
+<body>
+  <h1 id="clock">00:00:00</h1>
+  <h2 id="qsStatus">QUICKSHIFTER OFF</h2>
+  <h3>RPM: <span id="rpmLabel">0</span></h3>
+  <button class="Qs-btn" onclick="setQS(true)">QS ON</button>
+  <button class="Qs-btn" onclick="setQS(false)">QS OFF</button>
+
+  <h2>Delay Cut</h2>
+  <input type="range" id="cutTime" min="2" max="150" value="" oninput="updateCut(this.value)">
+  <div><span id="cutVal">60</span> ms</div>
+
+  <div class="grid">
+    <button class="btn" type="button" onclick="showPLLPopup()">PLL</button>
+    <button class="btn" type="button" onclick="showKudaPopup()">T.KUDA</button>
+    <button class="btn" type="button" onclick="sendCommand('BTN_C')">C</button>
+    <button class="btn" type="button" onclick="sendCommand('BTN_D')">D</button>
+  </div>
+  <button class="save-btn" type="button" onclick="sendCommand('SAVE_CONFIG')">SAVE</button>
+  <button class="save-btn" onclick="sendCommand('RESET_ALL')">RESET ALL</button>
+
+  <div id="popupPLL" class="popup">
+    <div class="popup-content">
+      <h2>PIT LIMITER</h2>
+      <label>RPM Aktif:</label>
+      <input type="range" min="1000" max="15000" value="" id="rpmPLL" oninput="setRPM_PLL(this.value)">
+      <div><span id="rpmPLLVal">5000</span> RPM</div>
+      <br>
+      <button type="button" onclick="sendCommand('PLL_MAIN_ON')">ON</button>
+      <button type="button" onclick="sendCommand('PLL_MAIN_OFF')">OFF</button>
+      <br><br>
+      <button type="button" onclick="closePLLPopup()">Kembali</button>
+    </div>
+  </div>
+
+  <div id="popupKuda" class="popup">
+    <div class="popup-content">
+      <h2>TIMING KUDA</h2>
+      <label>RPM Aktif:</label>
+      <input type="range" min="1000" max="15000" value="" id="rpmKuda" oninput="setRPM(this.value)">
+      <div><span id="rpmVal">5000</span> RPM</div>
+      <br>
+      <button type="button" onclick="sendCommand('KUDA_MAIN_ON')">ON</button>
+      <button type="button" onclick="sendCommand('KUDA_MAIN_OFF')">OFF</button>
+      <br><br>
+      <div id="beatList"></div>
+      <br><button type="button" onclick="closeKudaPopup()">Kembali</button>
+    </div>
+  </div>
+
+  <form action="/setratio" method="get">
+    <label>Rasio Pulsa (pulse/rev):</label>
+    <input type="number" step="0.1" name="ratio" value="2.0">
+    <input type="submit" value="Simpan">
+  </form>
+
+<script>
+  function updateClock() {
+    const now = new Date();
+      document.getElementById('clock').innerText = now.toTimeString().split(' ')[0];
+    }
+    setInterval(updateClock, 1000); updateClock();
+
+    function setQS(state) {
+      document.getElementById('qsStatus').innerText = state ? "QUICKSHIFTER ON" : "QUICKSHIFTER OFF";
+      sendCommand(state ? "QS_ON" : "QS_OFF");
+    }
+
+    function updateCut(val) {
+      document.getElementById('cutVal').innerText = val;
+      sendCommand("CUT_" + val);
+    }
+
+    function sendCommand(cmd) {
+      fetch("/cmd?do=" + cmd).then(r => console.log("Sent:", cmd));
+    }
+
+  function sendCommand(cmd) {
+  if (cmd === "RESET_ALL") {
+    if (!confirm("Yakin ingin reset semua pengaturan ke default?")) return;
+  }
+
+  fetch("/cmd?do=" + cmd)
+    .then(res => {
+      if (cmd === "SAVE_CONFIG") alert("Pengaturan berhasil disimpan!");
+      else if (cmd === "RESET_ALL") alert("Pengaturan telah di-reset ke default.");
+      else console.log("Sent:", cmd);
+    });
+}
+
+    function showPLLPopup() {
+      document.getElementById('popupPLL').style.display = 'block';
+      loadConfig();
+    }
+
+    function closePLLPopup() {
+      document.getElementById('popupPLL').style.display = 'none';
+    }
+
+    function setRPM_PLL(val) {
+      document.getElementById('rpmPLLVal').innerText = val;
+      sendCommand("PLL_RPM_" + val);
+    }
+
+    function showKudaPopup() {
+      document.getElementById('popupKuda').style.display = 'block';
+      loadConfig();
+    }
+
+    function closeKudaPopup() {
+      document.getElementById('popupKuda').style.display = 'none';
+    }
+
+    function setRPM(val) {
+      document.getElementById('rpmVal').innerText = val;
+      sendCommand("KUDA_RPM_" + val);
+    }
+
+    function toggleBeat(idx) {
+      const on = document.getElementById('beatToggle_' + idx).checked;
+      sendCommand("BEAT_ON_" + idx + "_" + on);
+    }
+
+    function setBeatDelay(idx, val) {
+      document.getElementById('beatDelayVal_' + idx).innerText = val;
+      sendCommand("BEAT_DELAY_" + idx + "_" + val);
+    }
+
+    function renderBeatList(beats = []) {
+      const cont = document.getElementById('beatList');
+      cont.innerHTML = '';
+      for (let i = 0; i < 10; i++) {
+        const beat = beats[i] || { on: false, delay: 60 };
+        cont.innerHTML += `
+          <div>
+            <label>Beat ${i + 1}</label>
+            <input type="checkbox" id="beatToggle_${i + 1}" ${beat.on ? "checked" : ""} onchange="toggleBeat(${i + 1})"> ON
+            <input type="range" min="10" max="300" value="${beat.delay}" oninput="setBeatDelay(${i + 1}, this.value)">
+            <span id="beatDelayVal_${i + 1}">${beat.delay}</span> ms
+          </div>`;
+      }
+    }
+
+    function loadConfig() {
+      fetch("/config")
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById('qsStatus').innerText = data.qs ? "QUICKSHIFTER ON" : "QUICKSHIFTER OFF";
+          document.getElementById('cutTime').value = data.cutTime;
+          document.getElementById('cutVal').innerText = data.cutTime;
+
+          document.getElementById('rpmLabel').innerText = data.rpm;
+
+          document.getElementById('rpmPLL').value = data.pllRPM;
+          document.getElementById('rpmPLLVal').innerText = data.pllRPM;
+
+          document.getElementById('rpmKuda').value = data.kudaRPM;
+          document.getElementById('rpmVal').innerText = data.kudaRPM;
+
+          renderBeatList(data.beat);
+        });
+    }
+
+    setInterval(() => {
+      fetch("/rpm").then(res => res.text()).then(rpm => {
+        document.getElementById("rpmLabel").innerText = rpm;
+      });
+    }, 1000);
+
+    window.addEventListener("load", loadConfig);
+  </script>
+</body>
+</html>
